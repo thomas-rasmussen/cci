@@ -1,0 +1,52 @@
+---
+title: "Performance"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{cci-performance}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r}
+library(cci)
+library(microbenchmark)
+library(benchmarkme)
+library(parallel)
+library(data.table)
+```
+
+```{r}
+## CPU
+cat("Machine:     "); print(get_cpu()$model_name)
+## True cores
+cat("Num cores:   "); print(detectCores(logical = FALSE))
+## Threads
+cat("Num threads: "); print(detectCores(logical = TRUE))
+```
+
+```{r}
+test_call <- function(n_id, n_diag) {
+  x <- data.frame(
+    id = rep(1:n_id, each = n_diag),
+    code = sample_codes(n_id * n_diag)
+  )
+  cci <- calculate_cci(x)
+  return()
+}
+
+bench <- microbenchmark(
+  "id_100_diag_100" = {test_call(100, 100)},
+  "id_10k_diag_100" = {test_call(10000, 100)},
+  times = 1L
+)
+
+print(bench, unit = "s", signif = 2)
+```
+

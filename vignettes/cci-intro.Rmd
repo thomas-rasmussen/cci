@@ -1,0 +1,193 @@
+---
+title: "Introduction to the `cci` package"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    toc: true
+vignette: >
+  %\VignetteIndexEntry{Introduction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+set.seed(1)
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+This vignette introduces the `cci` package, and how to use it to calculate the
+Charlson Comorbidity Index (CCI) based on diagnosis data using the International 
+Statistical Classification of Diseases and Related Health Problems (ICD).
+
+The package is inspired by the excellent `comorbidiy` [package](https://ellessenne.github.io/comorbidity/), but is focused on 
+facilitating calculation of the CCI when working with data from the Danish
+National Patient Registry that uses ICD-8 and ICD-10 diagnosis codes.
+
+This vignette uses the following packages:
+
+```{r}
+library(cci)
+library(data.table)
+```
+
+
+## International Statistical Classification of Diseases and Related Health Problems (ICD)
+
+Different versions of ICD codes exists. In the Danish National Patient Registry
+(DNPR) diagnoses are coded using ICD-8 prior to 1994, and as ICD-10 afterwards.
+Because of this, the package focuses on these versions of the ICD codes, but it
+is possible to modify/overwrite the default CCI definition so that eg ICD-9 
+codes can be included in the definition. See the Codelists section.
+
+
+## Sample ICD codes using `sample_codes()`
+
+The package includes a helper function `sample_codes()`, that can be used to
+simulate diagnosis data by sampling from lists of ICD codes included with
+the package. 
+
+```{r}
+sample_codes(10L)
+```
+
+By default, the function samples both ICD-8 and ICD-10. If only want to sample
+other combinations of ICD codes, this can be done using the `code_sources`
+argument. 
+
+```{r}
+sample_codes(10L, code_sources = "icd10_cm_2020")
+```
+
+Currently, only ICD-8 and ICD-10 can be sampled. Finally, we can control the 
+maximum length of the code that is sampled, so that if a very specific code is 
+sampled, it is truncated:
+
+```{r}
+sample_codes(10L, max_code_length = 2)
+```
+
+
+## Calculate the CCI
+
+The main function of the `cci` package is `calculate_cci()`. It takes as input
+a data.frame with diagnosis data, and calculates the CCI for unique values of
+the id variable that identifies each person.
+
+```{r}
+diag <- data.frame(
+    id = rep(1:5, each = 20),
+    code = sample_codes(100)
+  )
+
+head(diag)
+
+calculate_cci(diag)
+```
+
+The above function calls assume that the id and diagnosis variable names are 
+called "id" and "code". If this is not the case, the correct variable names 
+can be specified using the `id`and `code` arguments.
+
+
+## Corrections
+
+## Handling SKS codes in the Danish National Patient Registry
+
+As mentioned, this package is focused on facilitating use of data from the DNPR.
+Diagnosis codes in the DNPR are so-called SKS-codes, which means in practice
+that all ICD-10 codes have a "D" prefix. The `calculate_cci` function 
+automatically converts SKS ICD-10 codes to real ICD-10 codes. If the diagnosis
+data does not contain SKS ICD-10 codes, consider setting `sks_codes = FALSE`
+(informal testing suggests this does not make a difference in practice).
+
+
+## Codelists
+
+What ICD codes to include/exclude in the definition of the Charlson Comorbidity
+Index is not at all obvious. First of all, it obviously depends on what version(s)
+of ICD codes are used in the diagnosis data, but it can also depend on how the codes are
+used in practice. For example, the use of ICD-10 codes in Denmark differ from
+the ICD-10(-CM) codes. Exactly how is not clear to the author of this package
+(at least as of writing this), but from conversations with epidemiologists "Z"
+codes are apparently used differently, and some "augmentations" have been made
+to some ICD-10 codes by adding suffixes like "M" to cancer codes to indicate
+metastasis. The point is, that there is likely not one "correct" definition of
+codes to use when calculating the CCI, and the user needs to be very aware of 
+what codes are used, and if those are appropriate for data at hand.
+
+The `calculate_cci` function has a `codelist` argument, that can be used to
+overwrite the default definition. The default codelist `cci_codelist_icd8_icd10`
+uses both ICD-8 and ICD-10 codes, and is a typical definition used in 
+observational studies using diagnosis data from the Danish National Patient Registry.
+The object is included in the package and can easily be modified/overwitten as needed.
+
+```{r}
+diag <- data.frame(
+  id = rep(1:5, each = 200),
+  code = sample_codes(1000)
+)
+
+# Use default codelist
+cci_default <- calculate_cci(diag)
+# Use codelist only using ICD-10 codes
+cci_only_icd10 <- calculate_cci(diag, codelist = cci::cci_codelist_icd10)
+
+# The codelist object is just a nested list, with a list element for each 
+# disease group in the CCI definition
+cci_codelist_icd8_icd10[1]
+# So we could make a modified list where we change the MI definition like so
+modified_list <- cci_codelist_icd8_icd10
+modified_list[[1]][["codes"]] <- c("Some set of codes")
+cci_mod1 <- calculate_cci(diag, codelist = modified_list)
+
+```
+
+
+## Example
+
+We will end this vignette with showing an example of how the package could be
+used in a real study. First, lets simulate a study population with an index date
+and diagnosis data on this population.
+
+```{r}
+pop <- data.table(
+  id = 1:10,
+  index_date = sample.int(100, 10, replace = TRUE)
+)
+
+diag <- data.table(
+  id = rep(1:10, each = 50),
+  code = sample_codes(500),
+  code_date = sample.int(100, 500, replace = TRUE)
+)
+
+
+```
+
+Typically, we would be interested in calculating the CCI on the index date, 
+using all diagnosis data prior to the index date, but not on or after that date.
+Finally, we would like merge the calculated CCI to the study population. This 
+could be achieved like this:
+
+```{r}
+# Merge diagnosis data to population, restrict to diagnoses before the
+# index date, and calculate the CCI.
+cci <- merge(pop, diag, by = "id")[code_date < index_date, ] |>
+  calculate_cci()
+# Merge the result to the study population, and take into account that some
+# patients might not have any relevant diagnosis data.
+cci <- merge(pop, cci, by = "id", all.x = TRUE)[, cci := ifelse(is.na(cci), 0, cci)]
+```
+
+
+
+
+
+
+
+
+
+

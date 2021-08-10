@@ -1,0 +1,29 @@
+Package: cci
+Title: Calculate Charlson Comorbidity Index
+Version: 0.0.1
+Authors@R: 
+    person(given = "Thomas",
+           family = "Bøjer Rasmussen",
+           role = c("aut", "cre"),
+           email = "thomasboejer@gmail.com",
+           comment = c(ORCID = "0000-0003-0120-1712"))
+Description: Implementation of the Charlson Comorbidity Index (CCI) using registry data.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.1
+Suggests: 
+    benchmarkme,
+    knitr,
+    microbenchmark,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Depends: 
+    R (>= 2.10)
+Imports: 
+    utils,
+    checkmate,
+    data.table
+VignetteBuilder: knitr
